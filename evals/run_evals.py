@@ -3,11 +3,19 @@
 Agent Evaluation Scorecard Runner for commerce-agent.
 Evaluates agent routing, tool selection (expected_tool event trace enforcement), response assertions, and execution latency.
 Automatically updates the README.md scorecard block inside <!-- EVAL:BEGIN -->...<!-- EVAL:END -->.
+
+Case schema notes:
+- expected_tool: "<tool_name>" -> assert that tool appears in the ADK function_call event trace;
+                 "none"        -> assert NO tool was invoked;
+                 null          -> tool-agnostic (no tool-trace assertion; response assertions only).
+- mock_store_down: true -> the case runs with PS_URL pointed at a dead local port to simulate
+                 the PrestaShop store being offline.
 """
 import json
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 # Add src to pythonpath
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -77,7 +85,12 @@ def run_evals():
 
         start_time = time.time()
         try:
-            response, events = run_agent_query_with_events(prompt)
+            if case.get("mock_store_down"):
+                # Simulate the PrestaShop store being offline via a dead local port.
+                with patch.dict("os.environ", {"PS_URL": "http://localhost:59999/api"}):
+                    response, events = run_agent_query_with_events(prompt)
+            else:
+                response, events = run_agent_query_with_events(prompt)
             latency = time.time() - start_time
             total_latency += latency
 
@@ -93,14 +106,14 @@ def run_evals():
             failure_reasons = []
 
             # 1. Assert expected_tool invocation from event trace
-            if expected_tool is None or (isinstance(expected_tool, str) and expected_tool.lower() in ("none", "null")):
+            # ("none" -> assert no tool call; null -> tool-agnostic, skip trace assertion)
+            if isinstance(expected_tool, str) and expected_tool.lower() in ("none", "null"):
                 if called_tools:
                     passed = False
                     failure_reasons.append(f"Expected NO tool call, but called: {called_tools}")
-            else:
-                if expected_tool not in called_tools:
-                    passed = False
-                    failure_reasons.append(f"Expected tool '{expected_tool}' was NOT invoked (called: {called_tools})")
+            elif expected_tool is not None and expected_tool not in called_tools:
+                passed = False
+                failure_reasons.append(f"Expected tool '{expected_tool}' was NOT invoked (called: {called_tools})")
 
             # 2. Assert must_contain substrings
             for substring in must_contain:
@@ -130,7 +143,7 @@ def run_evals():
                 print(f"   ↳ Called Tools: {called_tools}")
                 print(f"   ↳ Response Snippet: {response[:150]}...\n")
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — eval harness boundary: any agent crash must be recorded as a FAIL row and the remaining cases must still run
             latency = time.time() - start_time
             total_latency += latency
             failed_count += 1

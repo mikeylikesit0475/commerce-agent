@@ -54,7 +54,13 @@ To guarantee **100% reliability, safety, and strict human control**:
 - **Framework**: Built natively on **Google ADK** (`google.adk.Agent`, `google.adk.Runner`, `google.adk.tools.FunctionTool`).
 - **Model**: `olmo-3.1:32b-instruct` running locally via Ollama.
 - **Provider Adapter**: `google.adk.models.lite_llm.LiteLlm` (`ollama_chat/olmo-3.1:32b-instruct`).
-- **SERVICE_TOKEN Minting**: In development environments, mint a service JWT via `curl -s "http://localhost:5275/dev/token?role=service"` and set `SERVICE_TOKEN` in `.env`.
+- **SERVICE_TOKEN Minting**: In development environments, mint a service JWT from the Commerce Core API dev endpoint. The endpoint returns JSON of the form `{"token": "<jwt>"}` — extract the `.token` field and set it as `SERVICE_TOKEN` in `.env`:
+
+  ```bash
+  curl -s "http://localhost:5275/dev/token?role=service" | jq -r .token
+  ```
+
+  **Note:** the minted token **expires after 1 hour**. If `get_inventory_alerts` starts returning `Core API returned status 401`, mint a fresh token and update `.env`.
 
 ### Environment Variables (`.env`)
 
@@ -78,6 +84,12 @@ uv run python -m commerce_agent
 
 Example Interactive Flow:
 ```text
+==================================================
+ Commerce Agent Interactive CLI / REPL
+ Explicit Commands: 'improve <product_id>' (e.g. 'improve 20')
+ Type 'exit' or 'quit' to terminate.
+==================================================
+
 CommerceAgent> improve 20
 
 [FETCHING PRODUCT #20 FROM PRESTASHOP...]
@@ -85,12 +97,13 @@ Product: Electronics Product 1 (ID: 20)
 Current Description: "Electronics Product 1 description"
 
 [GENERATING IMPROVED DESCRIPTION VIA LLM...]
+Deprecated. Please migrate to the async method.
 
 Agent Answer:
 [DRAFT DESCRIPTION FOR REVIEW]
 Product: Electronics Product 1 (ID: 20)
 Proposed New Description:
-"High performance Electronics Product 1 featuring premium quality craftsmanship, modern design, and durable reliability."
+"Experience seamless performance and cutting-edge innovation with Electronics Product 1—designed to elevate your everyday tech experience."
 
 Please confirm: Do you want to publish this update to PrestaShop? (Reply 'yes' or 'confirm' to proceed)
 
@@ -100,8 +113,13 @@ CommerceAgent> yes
 [PRESTASHOP STORE UPDATED SUCCESSFULLY]
 Product: Electronics Product 1 (ID: 20)
 Stored Description in Database:
-"High performance Electronics Product 1 featuring premium quality craftsmanship, modern design, and durable reliability."
+"Experience seamless performance and cutting-edge innovation with Electronics Product 1—designed to elevate your everyday tech experience."
+
+CommerceAgent> exit
+Goodbye!
 ```
+
+> **Known limitation — session continuity:** each REPL query runs in a fresh agent session (no conversational memory between turns); only the pending `improve <id>` draft awaiting confirmation spans turns.
 
 ---
 
@@ -111,9 +129,11 @@ Stored Description in Database:
 # Run pytest unit and integration tests
 uv run pytest
 
-# Run 15-case benchmark evaluation suite (asserts expected_tool from ADK event trace)
+# Run 16-case benchmark evaluation suite (asserts expected_tool from ADK event trace)
 uv run python evals/run_evals.py
 ```
+
+**Exception-suppression policy:** broad `except Exception` (`BLE001`) suppressions are not allowed in application code — every handler catches specific exception types; the single remaining `# noqa: BLE001` (the eval harness boundary in `evals/run_evals.py`) carries an inline one-line justification.
 
 ### 📊 Automated Scorecard Output
 
@@ -121,32 +141,33 @@ uv run python evals/run_evals.py
 ```text
 ==========================================================================
  🤖 COMMERCE AGENT EVALUATION SCORECARD
- Date: 2026-07-25 | Total Test Cases: 15
+ Date: 2026-07-25 | Total Test Cases: 16
 ==========================================================================
 
 ID         | Case Name                        | Status | Latency 
 -----------------------------------------------------------------
-cat_01     | Catalog hit - Electronics        | PASS   | 19.67s
-cat_02     | Catalog hit - Clothing           | PASS   | 15.12s
-cat_03     | Catalog hit - Books              | PASS   | 21.36s
-cat_04     | Catalog miss - Flying Cars       | PASS   | 9.30s
-cat_05     | Catalog miss - Submarines        | PASS   | 8.07s
-cat_06     | Catalog hit - Home & Garden      | PASS   | 24.24s
-cat_07     | Catalog hit - Sports & Outdoors  | PASS   | 24.72s
-ord_01     | Order lookup - Existing Order 9  | PASS   | 12.60s
-ord_02     | Order lookup - Existing Order 10 | FAIL   | 9.54s
-ord_03     | Order lookup - Nonexistent Order | PASS   | 9.80s
-router_01  | Nonsense prompt - Gibberish      | PASS   | 7.08s
-router_02  | Ambiguous greeting               | PASS   | 7.76s
-alert_01   | Inventory alerts lookup          | PASS   | 7.11s
-store_01   | Specific product search - Sports | FAIL   | 10.33s
-store_02   | Specific product search - Clothi | FAIL   | 9.53s
+cat_01     | Catalog hit - Electronics        | FAIL   | 7.73s
+cat_02     | Catalog hit - Clothing           | PASS   | 16.13s
+cat_03     | Catalog hit - Books              | FAIL   | 8.59s
+cat_04     | Catalog miss - Flying Cars       | PASS   | 8.33s
+cat_05     | Catalog miss - Submarines        | PASS   | 7.92s
+cat_06     | Catalog hit - Home & Garden      | PASS   | 25.68s
+cat_07     | Catalog hit - Sports & Outdoors  | PASS   | 23.13s
+ord_01     | Order lookup - Existing Order 12 | PASS   | 11.97s
+ord_02     | Order lookup - Existing Order 13 | FAIL   | 9.73s
+ord_03     | Order lookup - Nonexistent Order | PASS   | 6.60s
+router_01  | Nonsense prompt - Gibberish      | PASS   | 6.26s
+router_02  | Ambiguous greeting               | PASS   | 6.88s
+alert_01   | Inventory alerts lookup          | PASS   | 6.30s
+store_down | Store offline - error surfaced   | PASS   | 14.79s
+store_01   | Specific product search - Sports | FAIL   | 11.19s
+store_02   | Specific product search - Clothi | FAIL   | 9.36s
 -----------------------------------------------------------------
 
 📊 FINAL EVALUATION SCORECARD:
-   - Total Passed: 12/15 (80.0%)
-   - Total Failed: 3/15
-   - Average Response Latency: 13.08s
+   - Total Passed: 11/16 (68.8%)
+   - Total Failed: 5/16
+   - Average Response Latency: 11.29s
 ==========================================================================
 ```
 <!-- EVAL:END -->

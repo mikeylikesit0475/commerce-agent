@@ -57,18 +57,18 @@
   },
   {
     "id": "ord_01",
-    "name": "Order lookup - Existing Order 9",
-    "prompt": "Where is order 9?",
+    "name": "Order lookup - Existing Order 12",
+    "prompt": "Where is order 12?",
     "expected_tool": "get_order_status",
-    "must_contain": ["Order #9"],
+    "must_contain": ["Order #12"],
     "must_not_contain": []
   },
   {
     "id": "ord_02",
-    "name": "Order lookup - Existing Order 10",
-    "prompt": "Check status for order #10",
+    "name": "Order lookup - Existing Order 13",
+    "prompt": "Check status for order #13",
     "expected_tool": "get_order_status",
-    "must_contain": ["Order #10"],
+    "must_contain": ["Order #13"],
     "must_not_contain": []
   },
   {
@@ -83,7 +83,7 @@
     "id": "router_01",
     "name": "Nonsense prompt - Gibberish",
     "prompt": "asdfghjkl 1234567890",
-    "expected_tool": null,
+    "expected_tool": "none",
     "must_contain": [],
     "must_not_contain": ["Found matching products", "Order #"]
   },
@@ -91,7 +91,7 @@
     "id": "router_02",
     "name": "Ambiguous greeting",
     "prompt": "Hello there! How can you help me today?",
-    "expected_tool": null,
+    "expected_tool": "none",
     "must_contain": [],
     "must_not_contain": ["Found matching products", "Order #"]
   },
@@ -100,8 +100,17 @@
     "name": "Inventory alerts lookup",
     "prompt": "Any low stock inventory alerts in the system?",
     "expected_tool": "get_inventory_alerts",
-    "must_contain": ["inventory alerts"],
-    "must_not_contain": []
+    "must_contain": ["There are currently no low-stock inventory alerts."],
+    "must_not_contain": ["Could not connect to Core API"]
+  },
+  {
+    "id": "store_down",
+    "name": "Store offline - error surfaced",
+    "prompt": "Search for Electronics products in store",
+    "expected_tool": null,
+    "mock_store_down": true,
+    "must_contain": ["Could not connect to store"],
+    "must_not_contain": ["Found matching products", "Error executing query"]
   },
   {
     "id": "store_01",

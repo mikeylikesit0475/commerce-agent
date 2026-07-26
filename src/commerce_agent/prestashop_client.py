@@ -34,7 +34,8 @@ class PrestaShopClient:
                 if prod_id:
                     stock_map[int(prod_id)] = int(qty)
             return stock_map
-        except Exception:  # noqa: BLE001
+        except (requests.RequestException, ValueError, TypeError):
+            # Connection/HTTP failures or malformed JSON/ids: stock is optional enrichment.
             return {}
 
     def get_products(self, query: str):
@@ -79,7 +80,7 @@ class PrestaShopClient:
 
             return filtered if filtered else {"message": f"No products found matching '{query}'."}
 
-        except Exception as e:  # noqa: BLE001
+        except (requests.RequestException, ValueError, TypeError) as e:
             return {"error": f"Could not connect to store: {e!s}"}
 
     def get_order(self, order_id: str):
@@ -127,7 +128,7 @@ class PrestaShopClient:
                 "date_add": order.get("date_add"),
                 "items": items
             }
-        except Exception as e:  # noqa: BLE001
+        except (requests.RequestException, ValueError, TypeError) as e:
             return {"error": f"Could not fetch order: {e!s}"}
 
     def get_product_by_id(self, product_id: int):
@@ -152,7 +153,7 @@ class PrestaShopClient:
                 "stock": stock_qty,
                 "description": p.get("description") or p.get("description_short")
             }
-        except Exception as e:  # noqa: BLE001
+        except (requests.RequestException, ValueError, TypeError) as e:
             return {"error": f"Could not fetch product: {e!s}"}
 
     def update_product_description(self, product_id: int, new_description: str):
@@ -192,5 +193,5 @@ class PrestaShopClient:
                 return {"success": True, "product_id": product_id, "new_description": new_description}
             else:
                 return {"error": f"Failed to update product description. Status: {put_resp.status_code}, Details: {put_resp.text[:150]}"}
-        except Exception as e:  # noqa: BLE001
+        except (requests.RequestException, ValueError, TypeError) as e:
             return {"error": f"Could not update product description: {e!s}"}

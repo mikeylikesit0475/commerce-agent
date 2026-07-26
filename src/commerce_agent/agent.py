@@ -1,5 +1,6 @@
 import logging
 import os
+
 import requests
 from dotenv import load_dotenv
 from google.adk import Agent, Runner
@@ -7,6 +8,7 @@ from google.adk.models.lite_llm import LiteLlm
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import FunctionTool
 from google.genai import types
+from litellm.exceptions import APIError
 
 from .prestashop_client import PrestaShopClient
 
@@ -95,7 +97,7 @@ def get_inventory_alerts() -> str:
             for a in alerts
         ]
         return "Active Inventory Alerts:\n" + "\n".join(alert_lines)
-    except Exception as e:  # noqa: BLE001
+    except requests.RequestException as e:
         return f"Could not connect to Core API for inventory alerts: {e!s}"
 
 
@@ -131,7 +133,7 @@ def generate_description_copy(product_name: str, current_description: str) -> st
                 text_parts = [p.text for p in event.content.parts if hasattr(p, "text") and p.text]
                 if text_parts:
                     return "\n".join(text_parts).strip('"').strip()
-    except Exception as e:  # noqa: BLE001
+    except APIError as e:
         logger.warning(f"Error generating copy via LLM: {e}")
 
     return f"High performance {product_name} featuring premium quality craftsmanship, modern design, and durable reliability."
@@ -160,7 +162,8 @@ def create_router_agent():
         2. For ANY order tracking, order status, or order inquiry (e.g. "Where is order X?", "Check status of order #X") -> ALWAYS call get_order_status with the order ID string.
         3. For ANY low stock alerts, inventory warnings, or system alert questions (e.g. "Any inventory alerts?") -> ALWAYS call get_inventory_alerts.
         4. For nonsense, ambiguous, or unclassifiable inputs (e.g. "asdfghjkl", "Hello") -> do NOT invoke any tools. Ask a polite clarifying question.
-        Always base your final response strictly on the tool output.""",
+        Always base your final response strictly on the tool output.
+        When a tool returns a status notice or an error message (for example a 'no alerts' notice or a store connection error), repeat that tool message verbatim, word for word, in your final response. Do not paraphrase, shorten, or reword it.""",
         model=model,
         tools=[catalog_tool, order_tool, alerts_tool]
     )
@@ -223,7 +226,9 @@ def run_agent_query_with_events(query: str):
 
         return response_text, events
             
-    except Exception as e:  # noqa: BLE001
+    except (APIError, ConnectionError, TimeoutError) as e:
+        # Only LLM-provider/connectivity failures degrade to an error string;
+        # unexpected exceptions (programming errors) must surface to the caller.
         logger.warning(f"ADK LLM execution fallback due to: {e}")
         return f"Error executing query: {e!s}", []
 
