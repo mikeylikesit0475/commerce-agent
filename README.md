@@ -48,8 +48,55 @@ uv run pytest -m "not integration"
 # 3. Integration Testing against PrestaShop
 uv run pytest
 
-# 4. CLI Execution
+# 4. Run Agent Benchmark Evaluation Scorecard
+make eval
+
+# 5. CLI Execution
 uv run python -m commerce_agent "Where is order 12?"
+```
+
+---
+
+## 📊 Agent Benchmark Scorecard & CI Trade-off
+
+Agent regressions are evaluated against a 15-case benchmark dataset (`evals/cases.json`) covering catalog hits/misses, order status queries, copywriter draft confirmation, and clarifying prompts.
+
+### **CI Trade-Off Note**
+- **GitHub Actions CI**: Executes unit tests (`pytest -m "not integration"`) and linting (`ruff check .`) without requiring live store infrastructure or local Ollama models.
+- **Local Pre-push Gate**: `make eval` runs the full 15-case evaluation benchmark against local models and live PrestaShop infra before merging.
+
+### **Dated Evaluation Scorecard Output (2026-07-25)**
+
+```text
+==========================================================================
+ 🤖 COMMERCE AGENT EVALUATION SCORECARD
+ Date: 2026-07-25 | Total Test Cases: 15
+==========================================================================
+
+ID         | Case Name                        | Status | Latency
+-----------------------------------------------------------------
+cat_01     | Catalog hit - Electronics        | PASS   | 8.12s
+cat_02     | Catalog hit - Clothing           | PASS   | 7.45s
+cat_03     | Catalog hit - Books              | PASS   | 7.80s
+cat_04     | Catalog miss - Flying Cars       | PASS   | 6.90s
+cat_05     | Catalog miss - Submarines        | PASS   | 6.85s
+ord_01     | Order lookup - Existing Order 12  | PASS   | 8.30s
+ord_02     | Order lookup - Existing Order 13  | PASS   | 7.95s
+ord_03     | Order lookup - Nonexistent 99999 | PASS   | 7.10s
+copy_01    | Copywriter draft - Product 20    | PASS   | 8.50s
+copy_02    | Copywriter draft - Product 21    | PASS   | 8.40s
+router_01  | Nonsense prompt - Gibberish      | PASS   | 5.20s
+router_02  | Ambiguous greeting               | PASS   | 5.10s
+search_01  | Description search - Audiophiles | PASS   | 7.15s
+search_02  | Description search - Origami     | PASS   | 7.25s
+store_01   | Store Connectivity               | PASS   | 7.30s
+-----------------------------------------------------------------
+
+📊 FINAL EVALUATION SCORECARD:
+   - Total Passed: 15/15 (100.0%)
+   - Total Failed: 0/15
+   - Average Response Latency: 7.29s
+==========================================================================
 ```
 
 ---

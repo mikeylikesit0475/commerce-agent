@@ -1,0 +1,92 @@
+[
+  {
+    "id": "cat_01",
+    "name": "Catalog hit - Electronics",
+    "prompt": "Do we have any Electronics? What do they cost?",
+    "must_contain": ["Electronics Product 1"]
+  },
+  {
+    "id": "cat_02",
+    "name": "Catalog hit - Clothing",
+    "prompt": "Are there any Clothing items in stock?",
+    "must_contain": ["Clothing Product 1"]
+  },
+  {
+    "id": "cat_03",
+    "name": "Catalog hit - Books",
+    "prompt": "What Books do we carry?",
+    "must_contain": ["Books Product 1"]
+  },
+  {
+    "id": "cat_04",
+    "name": "Catalog miss - Flying Cars",
+    "prompt": "Do we sell flying cars?",
+    "must_contain": ["no products found"]
+  },
+  {
+    "id": "cat_05",
+    "name": "Catalog miss - Submarines",
+    "prompt": "Do you have nuclear submarines available?",
+    "must_contain": ["no products found"]
+  },
+  {
+    "id": "ord_01",
+    "name": "Order lookup - Existing Order 12",
+    "prompt": "Where is order 12?",
+    "must_contain": ["12"]
+  },
+  {
+    "id": "ord_02",
+    "name": "Order lookup - Existing Order 13",
+    "prompt": "Check status for order #13",
+    "must_contain": ["13"]
+  },
+  {
+    "id": "ord_03",
+    "name": "Order lookup - Nonexistent Order 99999",
+    "prompt": "What is the status of order 99999?",
+    "must_contain": ["not found"]
+  },
+  {
+    "id": "copy_01",
+    "name": "Copywriter draft - Product 20",
+    "prompt": "Improve description for product 20 to 'High performance premium gadget.'",
+    "must_contain": ["High performance premium gadget"]
+  },
+  {
+    "id": "copy_02",
+    "name": "Copywriter draft - Product 21",
+    "prompt": "Draft a new description for product 21 saying 'Ergonomic design with modern aesthetic.'",
+    "must_contain": ["Ergonomic design with modern aesthetic"]
+  },
+  {
+    "id": "router_01",
+    "name": "Nonsense prompt - Gibberish",
+    "prompt": "asdfghjkl 1234567890",
+    "must_contain": ["clarify"]
+  },
+  {
+    "id": "router_02",
+    "name": "Ambiguous greeting",
+    "prompt": "Hello there!",
+    "must_contain": ["help"]
+  },
+  {
+    "id": "search_01",
+    "name": "Description search - Audiophiles",
+    "prompt": "Find items for audiophiles",
+    "must_contain": ["Standard Gadget"]
+  },
+  {
+    "id": "search_02",
+    "name": "Description search - Origami",
+    "prompt": "Show me products inspired by origami",
+    "must_contain": ["Hummingbird"]
+  },
+  {
+    "id": "store_01",
+    "name": "Store Connectivity",
+    "prompt": "List Sports & Outdoors products",
+    "must_contain": ["Sports & Outdoors Product 1"]
+  }
+]
