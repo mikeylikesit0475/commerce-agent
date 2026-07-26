@@ -1,12 +1,11 @@
 from unittest.mock import patch
-
 from commerce_agent.agent import (
     create_router_agent,
+    get_inventory_alerts,
     get_order_status,
     get_products,
     update_product_description,
 )
-
 
 def test_get_products_tool_formatting():
     mock_data = [
@@ -53,7 +52,22 @@ def test_update_product_description_confirmed_writeback():
         assert "[PRESTASHOP STORE UPDATED SUCCESSFULLY]" in res
         assert "New awesome description" in res
 
+def test_get_inventory_alerts_formatting():
+    mock_alerts = [
+        {"id": 1, "productId": 2, "threshold": 5, "stockAtAlert": 2, "resolved": False}
+    ]
+    with (
+        patch.dict("os.environ", {"SERVICE_TOKEN": "MOCK_TOKEN"}),
+        patch("requests.get") as mock_get
+    ):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = mock_alerts
+
+        res = get_inventory_alerts()
+        assert "Active Inventory Alerts:" in res
+        assert "Product ID 2" in res
+
 def test_create_router_agent_instantiation():
     agent = create_router_agent()
     assert agent.name == "CommerceRouterAgent"
-    assert len(agent.tools) == 3
+    assert len(agent.tools) == 4

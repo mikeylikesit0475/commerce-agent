@@ -1,150 +1,152 @@
-# Commerce Agent (Multi-Agent System with Google ADK + LiteLLM)
+# Commerce Router Agent (Google ADK + LiteLLM + Ollama)
 
-Multi-agent AI platform built with **Google ADK** (`Agent`, `Runner`, `InMemorySessionService`) and **LiteLLM** wrapping local Ollama models (`olmo-3.1:32b-instruct`).
-
-## 📐 Architecture Diagram
-
-```text
-                               +-----------------------------+
-                               |     CommerceRouterAgent     |
-                               |    (Intent Classifier)      |
-                               +--------------+--------------+
-                                              |
-      +---------------------------------------+---------------------------------------+
-      |                                       |                                       |
-      v                                       v                                       v
-+-----------------------+           +-----------------------+           +-----------------------+
-|   CatalogSpecialist   |           | OrderSupportSpecialist|           |  CopywriterSpecialist |
-+-----------+-----------+           +-----------+-----------+           +-----------+-----------+
-            |                                   |                                   |
-            v                                   v                                   v
-    get_products()                      get_order_status()              update_product_description()
-            |                                   |                                   |
-            +-----------------------------------+-----------------------------------+
-                                                |
-                                                v
-                               +-----------------------------+
-                               |   PrestaShop Webservice API |
-                               | (Products, Orders, Stock)   |
-                               +-----------------------------+
-```
-
-### Design Rationale: Multi-Tool Router Agent
-The router agent acts as a unified entry point, utilizing tool schemas and intent instructions to select the appropriate specialist tool. This avoids redundant round-trips while enforcing domain safety (e.g., draft confirmation before database mutation).
+An autonomous e-commerce AI assistant built on the **Google Agent Development Kit (ADK)** framework. Uses LiteLLM to interface with a locally hosted Ollama LLM (`olmo-3.1:32b-instruct`) and orchestrates tools across PrestaShop store APIs and the Commerce Core API.
 
 ---
 
-## 🚀 Quickstart
+## 🏗️ Architecture & Component Design
+
+```
+                     ┌───────────────────────────────┐
+                     │   User Terminal / CLI REPL    │
+                     └───────────────┬───────────────┘
+                                     │
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │     CommerceRouterAgent       │
+                     │    (Google ADK + LiteLLM)     │
+                     └───────────────┬───────────────┘
+                                     │
+         ┌───────────────────┬───────┴───────┬───────────────────┐
+         │                   │               │                   │
+         ▼                   ▼               ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│  get_products   │ │get_order_status │ │update_product_  │ │  get_inventory_ │
+│                 │ │                 │ │   description   │ │     alerts      │
+└────────┬────────┘ └────────┬────────┘ └────────┬────────┘ └────────┬────────┘
+         │                   │                   │                   │
+         ▼                   ▼                   ▼                   ▼
+┌─────────────────────────────────────────────────────────┐ ┌─────────────────┐
+│               PrestaShop Webservice API                 │ │Commerce Core API│
+│                 (http://localhost:8080)                 │ │ (localhost:5275)│
+└─────────────────────────────────────────────────────────┘ └─────────────────┘
+```
+
+### **Specialist Tools**
+
+1. **`get_products(query)`**: Queries PrestaShop catalog JSON endpoints and combines with stock availability data (`ps_stock_available`).
+2. **`get_order_status(order_id)`**: Fetches order reference, payment status, total amount paid, and item details.
+3. **`update_product_description(product_id, new_description, confirmed)`**:
+   - **Draft Mode (`confirmed=False`)**: Presents formatted proposed description draft for review.
+   - **Publish Mode (`confirmed=True`)**: Strips read-only XML fields and PUTs update to PrestaShop Webservice API.
+4. **`get_inventory_alerts()`**: Authenticates against `commerce-core-api` using `SERVICE_TOKEN` and fetches active low-stock inventory alerts.
+
+---
+
+## 🔒 Deterministic Confirmation Flow Design
+
+To ensure **safety and strict human oversight** over mutating store data:
+1. **Model Draft Generation**: The LLM uses `update_product_description(confirmed=False)` to generate and propose description drafts.
+2. **Deterministic CLI REPL**: Application logic in `commerce_agent.__main__` captures the draft state.
+3. **Explicit User Approval**: The application code requires explicit user input (`yes`/`y`/`confirm`/`publish`) in the terminal. When confirmed, the application invokes the write path directly without depending on secondary model turns.
+
+---
+
+## 🤖 Model Rationale & Environment Configuration
+
+- **Framework**: Built natively on **Google ADK** (`google.adk.Agent`, `google.adk.Runner`, `google.adk.tools.FunctionTool`).
+- **Model**: `olmo-3.1:32b-instruct` running locally via Ollama.
+- **Provider Adapter**: `google.adk.models.lite_llm.LiteLlm` (`ollama_chat/olmo-3.1:32b-instruct`).
+
+### Environment Variables (`.env`)
+
+```env
+PS_URL=http://localhost:8080/api
+WEBSERVICE_KEY=your_random_32_char_key_here
+AGENT_MODEL=olmo-3.1:32b-instruct
+CORE_API_URL=http://localhost:5275
+SERVICE_TOKEN=your_service_jwt_token_here
+```
+
+---
+
+## 🚀 Quickstart & Usage
+
+### 1. Run Interactive CLI / REPL Session
 
 ```bash
-# 1. Environment & Dependencies
-cp .env.example .env
-uv sync
+uv run python -m commerce_agent
+```
 
-# 2. Linting & Unit Testing
-uv run ruff check .
-uv run pytest -m "not integration"
+Example Interactive Flow:
+```text
+CommerceAgent> Draft an updated description for product 20 as: High performance premium gadget.
 
-# 3. Integration Testing against PrestaShop
-uv run pytest
+Agent Answer:
+[DRAFT DESCRIPTION FOR REVIEW]
+Product: Electronics Product 1 (ID: 20)
+Proposed New Description:
+"High performance premium gadget."
 
-# 4. Run Agent Benchmark Evaluation Scorecard
-make eval
+Please confirm: Do you want to publish this update to PrestaShop? (Reply 'yes' or 'confirm' to proceed)
 
-# 5. CLI Execution
-uv run python -m commerce_agent "Where is order 12?"
+CommerceAgent> yes
+
+[CONFIRM RECEIVED] Publishing update to PrestaShop for Product #20...
+[PRESTASHOP STORE UPDATED SUCCESSFULLY]
+Product: Electronics Product 1 (ID: 20)
+Stored Description in Database:
+"High performance premium gadget."
+```
+
+### 2. Run Single Command Line Query
+
+```bash
+uv run python -m commerce_agent "Do we have any Electronics? What do they cost?"
 ```
 
 ---
 
-## 📊 Agent Benchmark Scorecard & CI Trade-off
+## 🧪 Verification & Benchmark Scorecard
 
-Agent regressions are evaluated against a 15-case benchmark dataset (`evals/cases.json`) covering catalog hits/misses, order status queries, copywriter draft confirmation, and clarifying prompts.
+```bash
+# Run pytest unit and integration tests
+uv run pytest
 
-### **CI Trade-Off Note**
-- **GitHub Actions CI**: Executes unit tests (`pytest -m "not integration"`) and linting (`ruff check .`) without requiring live store infrastructure or local Ollama models.
-- **Local Pre-push Gate**: `make eval` runs the full 15-case evaluation benchmark against local models and live PrestaShop infra before merging.
+# Run 15-case benchmark evaluation suite
+uv run python evals/run_evals.py
+```
 
-### **Dated Evaluation Scorecard Output (2026-07-25)**
+### 📊 Real Live Benchmark Scorecard Results
 
 ```text
 ==========================================================================
  🤖 COMMERCE AGENT EVALUATION SCORECARD
- Date: 2026-07-25 | Total Test Cases: 15
+ Date: 2026-07-26 | Total Test Cases: 15
 ==========================================================================
 
 ID         | Case Name                        | Status | Latency
 -----------------------------------------------------------------
-cat_01     | Catalog hit - Electronics        | PASS   | 8.12s
-cat_02     | Catalog hit - Clothing           | PASS   | 7.45s
-cat_03     | Catalog hit - Books              | PASS   | 7.80s
-cat_04     | Catalog miss - Flying Cars       | PASS   | 6.90s
-cat_05     | Catalog miss - Submarines        | PASS   | 6.85s
-ord_01     | Order lookup - Existing Order 12  | PASS   | 8.30s
-ord_02     | Order lookup - Existing Order 13  | PASS   | 7.95s
-ord_03     | Order lookup - Nonexistent 99999 | PASS   | 7.10s
-copy_01    | Copywriter draft - Product 20    | PASS   | 8.50s
-copy_02    | Copywriter draft - Product 21    | PASS   | 8.40s
-router_01  | Nonsense prompt - Gibberish      | PASS   | 5.20s
-router_02  | Ambiguous greeting               | PASS   | 5.10s
-search_01  | Description search - Audiophiles | PASS   | 7.15s
-search_02  | Description search - Origami     | PASS   | 7.25s
-store_01   | Store Connectivity               | PASS   | 7.30s
+cat_01     | Catalog hit - Electronics        | PASS   | 23.02s
+cat_02     | Catalog hit - Clothing           | PASS   | 18.53s
+cat_03     | Catalog hit - Books              | PASS   | 27.25s
+cat_04     | Catalog miss - Flying Cars       | PASS   | 8.46s
+cat_05     | Catalog miss - Submarines        | PASS   | 12.00s
+ord_01     | Order lookup - Existing Order 6  | PASS   | 14.40s
+ord_02     | Order lookup - Existing Order 7  | PASS   | 14.44s
+ord_03     | Order lookup - Nonexistent Order | PASS   | 10.34s
+copy_01    | Copywriter draft - Product 20    | PASS   | 13.78s
+copy_02    | Copywriter draft - Product 21    | PASS   | 10.67s
+router_01  | Nonsense prompt - Gibberish      | PASS   | 7.26s
+router_02  | Ambiguous greeting               | PASS   | 10.75s
+alert_01   | Inventory alerts lookup          | PASS   | 36.87s
+store_01   | Sports & Outdoors search         | PASS   | 35.75s
+store_down | Store Offline Handling           | PASS   | 28.02s
 -----------------------------------------------------------------
 
 📊 FINAL EVALUATION SCORECARD:
    - Total Passed: 15/15 (100.0%)
    - Total Failed: 0/15
-   - Average Response Latency: 7.29s
+   - Average Response Latency: 18.10s
 ==========================================================================
-```
-
----
-
-## 📸 Real & Reproducible Transcripts
-
-### 1. Order Support Specialist ("Where is order 12?")
-```text
-$ uv run python -m commerce_agent "Where is order 12?"
-
-Question: Where is order 12?
-Agent Answer:
-Order #12 has a status of "Payment accepted / Processing." The total paid is $348.27, and it was placed on July 25th, 2026 at 8:35 PM.
-```
-
-### 2. Catalog Specialist ("Do we have any Electronics?")
-```text
-$ uv run python -m commerce_agent "Do we have any Electronics? What do they cost?"
-
-Question: Do we have any Electronics? What do they cost?
-Agent Answer:
-Yes, we have many Electronics products available. Here are some examples with their exact prices and stock quantities:
-
-- Electronics Product 1 (ID: 20): $67.63, Stock: 100
-- Electronics Product 2 (ID: 21): $442.72, Stock: 100
-- Electronics Product 3 (ID: 22): $464.06, Stock: 100
-- ...all currently in stock at 100 units each.
-```
-
-### 3. Copywriter Specialist (Draft Review Flow)
-```text
-$ uv run python -m commerce_agent "Improve description for product 20 to 'High performance premium flagship electronics gadget.'"
-
-Question: Improve description for product 20 to 'High performance premium flagship electronics gadget.'
-Agent Answer:
-[DRAFT DESCRIPTION FOR REVIEW]
-Product: Electronics Product 1 (ID: 20)
-Proposed New Description:
-"High performance premium flagship electronics gadget."
-
-Please confirm: Do you want to publish this update to PrestaShop? (Reply 'yes' or 'confirm' to proceed)
-```
-
-### 4. Nonsense / Ambiguous Prompt (Clarification Flow)
-```text
-$ uv run python -m commerce_agent "asdfghjk 12345"
-
-Question: asdfghjk 12345
-Agent Answer:
-I'm sorry, I didn't understand your request. Could you please clarify what information or assistance you're looking for?
 ```

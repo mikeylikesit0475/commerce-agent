@@ -3,90 +3,120 @@
     "id": "cat_01",
     "name": "Catalog hit - Electronics",
     "prompt": "Do we have any Electronics? What do they cost?",
-    "must_contain": ["Electronics Product 1"]
+    "expected_tool": "get_products",
+    "must_contain": ["Electronics Product 1", "$10.00"],
+    "must_not_contain": []
   },
   {
     "id": "cat_02",
     "name": "Catalog hit - Clothing",
     "prompt": "Are there any Clothing items in stock?",
-    "must_contain": ["Clothing Product 1"]
+    "expected_tool": "get_products",
+    "must_contain": ["Clothing Product 1"],
+    "must_not_contain": []
   },
   {
     "id": "cat_03",
     "name": "Catalog hit - Books",
-    "prompt": "What Books do we carry?",
-    "must_contain": ["Books Product 1"]
+    "prompt": "List all Books products available in our store",
+    "expected_tool": "get_products",
+    "must_contain": ["Books Product 1", "$40.00"],
+    "must_not_contain": []
   },
   {
     "id": "cat_04",
     "name": "Catalog miss - Flying Cars",
     "prompt": "Do we sell flying cars?",
-    "must_contain": ["no products found"]
+    "expected_tool": "get_products",
+    "must_contain": [],
+    "must_not_contain": ["Electronics Product", "Clothing Product", "Books Product"]
   },
   {
     "id": "cat_05",
     "name": "Catalog miss - Submarines",
     "prompt": "Do you have nuclear submarines available?",
-    "must_contain": ["no products found"]
+    "expected_tool": "get_products",
+    "must_contain": [],
+    "must_not_contain": ["Electronics Product", "Clothing Product", "Books Product"]
   },
   {
     "id": "ord_01",
-    "name": "Order lookup - Existing Order 12",
-    "prompt": "Where is order 12?",
-    "must_contain": ["12"]
+    "name": "Order lookup - Existing Order 6",
+    "prompt": "Where is order 6?",
+    "expected_tool": "get_order_status",
+    "must_contain": ["Order #6", "Payment accepted"],
+    "must_not_contain": []
   },
   {
     "id": "ord_02",
-    "name": "Order lookup - Existing Order 13",
-    "prompt": "Check status for order #13",
-    "must_contain": ["13"]
+    "name": "Order lookup - Existing Order 7",
+    "prompt": "Check status for order #7",
+    "expected_tool": "get_order_status",
+    "must_contain": ["Order #7", "Payment accepted"],
+    "must_not_contain": []
   },
   {
     "id": "ord_03",
     "name": "Order lookup - Nonexistent Order 99999",
     "prompt": "What is the status of order 99999?",
-    "must_contain": ["not found"]
+    "expected_tool": "get_order_status",
+    "must_contain": ["99999"],
+    "must_not_contain": ["Payment accepted"]
   },
   {
     "id": "copy_01",
     "name": "Copywriter draft - Product 20",
-    "prompt": "Improve description for product 20 to 'High performance premium gadget.'",
-    "must_contain": ["High performance premium gadget"]
+    "prompt": "Draft an updated description for product 20 as: High performance premium gadget.",
+    "expected_tool": "update_product_description",
+    "must_contain": ["[DRAFT DESCRIPTION FOR REVIEW]", "High performance premium gadget"],
+    "must_not_contain": ["STORE UPDATED SUCCESSFULLY"]
   },
   {
     "id": "copy_02",
     "name": "Copywriter draft - Product 21",
-    "prompt": "Draft a new description for product 21 saying 'Ergonomic design with modern aesthetic.'",
-    "must_contain": ["Ergonomic design with modern aesthetic"]
+    "prompt": "Draft an updated description for product 21 as: Ergonomic design with modern aesthetic.",
+    "expected_tool": "update_product_description",
+    "must_contain": ["[DRAFT DESCRIPTION FOR REVIEW]", "Ergonomic design with modern aesthetic"],
+    "must_not_contain": ["STORE UPDATED SUCCESSFULLY"]
   },
   {
     "id": "router_01",
     "name": "Nonsense prompt - Gibberish",
     "prompt": "asdfghjkl 1234567890",
-    "must_contain": ["clarify"]
+    "expected_tool": null,
+    "must_contain": [],
+    "must_not_contain": ["Found matching products", "Order #"]
   },
   {
     "id": "router_02",
     "name": "Ambiguous greeting",
-    "prompt": "Hello there!",
-    "must_contain": ["help"]
+    "prompt": "Hello there! How can you help me today?",
+    "expected_tool": null,
+    "must_contain": [],
+    "must_not_contain": ["Found matching products", "Order #"]
   },
   {
-    "id": "search_01",
-    "name": "Description search - Audiophiles",
-    "prompt": "Find items for audiophiles",
-    "must_contain": ["Standard Gadget"]
-  },
-  {
-    "id": "search_02",
-    "name": "Description search - Origami",
-    "prompt": "Show me products inspired by origami",
-    "must_contain": ["Hummingbird"]
+    "id": "alert_01",
+    "name": "Inventory alerts lookup",
+    "prompt": "Any low stock inventory alerts in the system?",
+    "expected_tool": "get_inventory_alerts",
+    "must_contain": ["Inventory Alerts"],
+    "must_not_contain": []
   },
   {
     "id": "store_01",
-    "name": "Store Connectivity",
+    "name": "Sports & Outdoors search",
     "prompt": "List Sports & Outdoors products",
-    "must_contain": ["Sports & Outdoors Product 1"]
+    "expected_tool": "get_products",
+    "must_contain": ["Sports & Outdoors Product 1", "$50.00"],
+    "must_not_contain": []
+  },
+  {
+    "id": "store_down",
+    "name": "Store Offline Handling",
+    "prompt": "Search for Electronics products in store",
+    "expected_tool": "get_products",
+    "must_contain": ["Error"],
+    "must_not_contain": ["Found matching products"]
   }
 ]

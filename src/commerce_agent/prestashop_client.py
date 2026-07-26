@@ -156,7 +156,7 @@ class PrestaShopClient:
             return {"error": f"Could not fetch product: {e!s}"}
 
     def update_product_description(self, product_id: int, new_description: str):
-        """Updates product description via PrestaShop PUT API."""
+        """Updates product description via PrestaShop PUT API (stripping read-only fields)."""
         if not self.key:
             return {"error": "WEBSERVICE_KEY environment variable is not configured."}
         try:
@@ -175,13 +175,22 @@ class PrestaShopClient:
                 xml_str,
                 flags=re.DOTALL
             )
+
+            # Strip read-only XML elements (including self-closing tags) that PrestaShop 8 rejects on PUT
+            read_only_tags = [
+                "manufacturer_name", "supplier_name", "quantity",
+                "id_default_combination", "id_default_image",
+                "position_in_category", "type"
+            ]
+            for tag in read_only_tags:
+                updated_xml = re.sub(rf"<{tag}[^>]*?>.*?</{tag}>|<{tag}[^>]*?/>", "", updated_xml, flags=re.DOTALL)
             
             headers = {"Content-Type": "application/xml", "Accept": "application/xml"}
-            put_resp = requests.put(f"{self.url}/products/{product_id}", auth=(self.key, ""), data=updated_xml, headers=headers, timeout=10)
+            put_resp = requests.put(f"{self.url}/products/{product_id}", auth=(self.key, ""), data=updated_xml.encode("utf-8"), headers=headers, timeout=10)
             
             if put_resp.status_code in (200, 201):
                 return {"success": True, "product_id": product_id, "new_description": new_description}
             else:
-                return {"error": f"Failed to update product description. Status: {put_resp.status_code}"}
+                return {"error": f"Failed to update product description. Status: {put_resp.status_code}, Details: {put_resp.text[:150]}"}
         except Exception as e:  # noqa: BLE001
             return {"error": f"Could not update product description: {e!s}"}

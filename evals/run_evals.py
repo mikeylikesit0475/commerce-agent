@@ -7,6 +7,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 # Add src to pythonpath
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -24,9 +25,10 @@ def run_evals():
     with open(CASES_FILE, "r") as f:
         cases = json.load(f)
 
+    today_date = time.strftime("%Y-%m-%d")
     print("==========================================================================")
     print(" 🤖 COMMERCE AGENT EVALUATION SCORECARD")
-    print(f" Date: 2026-07-25 | Total Test Cases: {len(cases)}")
+    print(f" Date: {today_date} | Total Test Cases: {len(cases)}")
     print("==========================================================================\n")
 
     passed_count = 0
@@ -41,10 +43,16 @@ def run_evals():
         name = case["name"]
         prompt = case["prompt"]
         must_contain = case.get("must_contain", [])
-        
+        must_not_contain = case.get("must_not_contain", [])
+
         start_time = time.time()
         try:
-            response = run_agent_query(prompt)
+            if case_id == "store_down":
+                with patch.dict("os.environ", {"PS_URL": "http://localhost:59999/api"}):
+                    response = run_agent_query(prompt)
+            else:
+                response = run_agent_query(prompt)
+
             latency = time.time() - start_time
             total_latency += latency
 
@@ -57,6 +65,11 @@ def run_evals():
                     passed = False
                     failure_reasons.append(f"Missing required substring '{substring}'")
 
+            for substring in must_not_contain:
+                if substring.lower() in response.lower():
+                    passed = False
+                    failure_reasons.append(f"Contains forbidden substring '{substring}'")
+
             if passed:
                 passed_count += 1
                 status_str = "PASS"
@@ -65,7 +78,7 @@ def run_evals():
                 status_str = "FAIL"
 
             print(f"{case_id:<10} | {name[:32]:<32} | {status_str:<6} | {latency:.2f}s")
-            
+
             if not passed:
                 print(f"   ↳ Failure Reasons: {', '.join(failure_reasons)}")
                 print(f"   ↳ Response Snippet: {response[:150]}...\n")
@@ -88,7 +101,7 @@ def run_evals():
     print(f"   - Average Response Latency: {avg_latency:.2f}s")
     print("==========================================================================")
 
-    return 0 if failed_count == 0 or passed_count >= 13 else 1
+    return 0 if passed_count >= 13 else 1
 
 if __name__ == "__main__":
     sys.exit(run_evals())
