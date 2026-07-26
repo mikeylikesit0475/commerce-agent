@@ -1,11 +1,12 @@
 from unittest.mock import patch
+
 from commerce_agent.agent import (
     create_router_agent,
     get_inventory_alerts,
     get_order_status,
     get_products,
-    update_product_description,
 )
+
 
 def test_get_products_tool_formatting():
     mock_data = [
@@ -34,24 +35,6 @@ def test_get_order_status_tool_formatting():
         assert "Payment accepted" in res
         assert "Electronics Product 1" in res
 
-def test_update_product_description_draft_unconfirmed():
-    mock_prod = {"id": 5, "name": "Test Mug", "description": "Old desc"}
-    with patch("commerce_agent.prestashop_client.PrestaShopClient.get_product_by_id", return_value=mock_prod):
-        res = update_product_description(5, "New awesome description", confirmed=False)
-        assert "[DRAFT DESCRIPTION FOR REVIEW]" in res
-        assert "New awesome description" in res
-        assert "Please confirm" in res
-
-def test_update_product_description_confirmed_writeback():
-    mock_prod = {"id": 5, "name": "Test Mug", "description": "New awesome description"}
-    with (
-        patch("commerce_agent.prestashop_client.PrestaShopClient.get_product_by_id", return_value=mock_prod),
-        patch("commerce_agent.prestashop_client.PrestaShopClient.update_product_description", return_value={"success": True})
-    ):
-        res = update_product_description(5, "New awesome description", confirmed=True)
-        assert "[PRESTASHOP STORE UPDATED SUCCESSFULLY]" in res
-        assert "New awesome description" in res
-
 def test_get_inventory_alerts_formatting():
     mock_alerts = [
         {"id": 1, "productId": 2, "threshold": 5, "stockAtAlert": 2, "resolved": False}
@@ -70,4 +53,4 @@ def test_get_inventory_alerts_formatting():
 def test_create_router_agent_instantiation():
     agent = create_router_agent()
     assert agent.name == "CommerceRouterAgent"
-    assert len(agent.tools) == 4
+    assert len(agent.tools) == 3

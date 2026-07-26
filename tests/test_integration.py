@@ -1,4 +1,5 @@
 import pytest
+
 from commerce_agent.prestashop_client import PrestaShopClient
 
 

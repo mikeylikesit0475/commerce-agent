@@ -70,40 +70,6 @@ def get_order_status(order_id: str) -> str:
     )
 
 
-def update_product_description(product_id: int, new_description: str, confirmed: bool = False) -> str:
-    """
-    Updates or improves the description of a product in PrestaShop.
-    ALWAYS call this tool with confirmed=False first to create a draft for user review.
-    """
-    client = PrestaShopClient()
-    prod = client.get_product_by_id(product_id)
-    if "error" in prod:
-        return f"Error fetching product: {prod['error']}"
-    if "message" in prod:
-        return prod["message"]
-
-    prod_name = prod.get("name", f"Product #{product_id}")
-
-    if not confirmed:
-        return (
-            f"[DRAFT DESCRIPTION FOR REVIEW]\n"
-            f"Product: {prod_name} (ID: {product_id})\n"
-            f"Proposed New Description:\n\"{new_description}\"\n\n"
-            f"Please confirm: Do you want to publish this update to PrestaShop? (Reply 'yes' or 'confirm' to proceed)"
-        )
-
-    update_res = client.update_product_description(product_id, new_description)
-    if "error" in update_res:
-        return f"Failed to update product description: {update_res['error']}"
-
-    verify_prod = client.get_product_by_id(product_id)
-    return (
-        f"[PRESTASHOP STORE UPDATED SUCCESSFULLY]\n"
-        f"Product: {verify_prod.get('name')} (ID: {product_id})\n"
-        f"Stored Description in Database:\n\"{verify_prod.get('description')}\""
-    )
-
-
 def get_inventory_alerts() -> str:
     """
     Fetches active low-stock inventory alerts from the Commerce Core API.
@@ -133,10 +99,47 @@ def get_inventory_alerts() -> str:
         return f"Could not connect to Core API for inventory alerts: {e!s}"
 
 
+def generate_description_copy(product_name: str, current_description: str) -> str:
+    """
+    Generates an improved marketing description for a product using plain LLM text generation (no tool calling).
+    Implemented as part of the architect decision: LLM generates copy, code orchestrates side effects.
+    """
+    raw_model_name = os.getenv("AGENT_MODEL", "olmo-3.1:32b-instruct")
+    if not raw_model_name.startswith("ollama_chat/") and not raw_model_name.startswith("ollama/"):
+        model_spec = f"ollama_chat/{raw_model_name}"
+    else:
+        model_spec = raw_model_name
+
+    model = LiteLlm(model=model_spec)
+    copy_agent = Agent(
+        name="CopywriterGenerationAgent",
+        instruction="You are an expert e-commerce copywriter. Write a compelling, high-converting product description (2-3 sentences max). Return ONLY the product description text, with no preamble or explanation.",
+        model=model,
+        tools=[]
+    )
+    session_service = InMemorySessionService()
+    runner = Runner(app_name="copywriter_gen_app", agent=copy_agent, session_service=session_service)
+    session = session_service.create_session_sync(app_name="copywriter_gen_app", user_id="user_cli")
+    
+    prompt = f"Write an improved description for this product:\nProduct Name: {product_name}\nCurrent Description: {current_description}"
+    message = types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
+    
+    try:
+        events = list(runner.run(user_id="user_cli", session_id=session.id, new_message=message))
+        for event in reversed(events):
+            if hasattr(event, "content") and event.content and event.content.role == "model":
+                text_parts = [p.text for p in event.content.parts if hasattr(p, "text") and p.text]
+                if text_parts:
+                    return "\n".join(text_parts).strip('"').strip()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Error generating copy via LLM: {e}")
+
+    return f"High performance {product_name} featuring premium quality craftsmanship, modern design, and durable reliability."
+
+
 # Wrap functions in ADK FunctionTools
 catalog_tool = FunctionTool(func=get_products)
 order_tool = FunctionTool(func=get_order_status)
-copywriter_tool = FunctionTool(func=update_product_description)
 alerts_tool = FunctionTool(func=get_inventory_alerts)
 
 
@@ -152,21 +155,20 @@ def create_router_agent():
     agent = Agent(
         name="CommerceRouterAgent",
         instruction="""You are the main customer service and store management assistant for our online store.
-        Your job is to understand the user's intent and invoke the appropriate tool:
-        1. For product catalog, search, stock, or price questions -> call get_products.
-        2. For order tracking, order status, or order inquiries -> call get_order_status.
-        3. For drafting, writing, or updating product descriptions -> ALWAYS call update_product_description tool with confirmed=False to present the proposed draft for user review.
-        4. For low stock alerts, inventory warnings, or system alerts -> call get_inventory_alerts.
-        5. For nonsense, ambiguous, or unclassifiable inputs -> ask a polite clarifying question. Do NOT invoke tools for gibberish.
-        Always provide clear, helpful answers based on tool results.""",
+        Your job is to understand the user's intent and ALWAYS invoke the appropriate tool:
+        1. For ANY product, item, catalog, search, category, stock, or price inquiry (e.g. "Do we sell X?", "Search for X", "List X items", "Check stock for X") -> ALWAYS call get_products with the relevant product or category search query (e.g., query='Books', query='flying cars', query='Home & Garden', query='Clothing').
+        2. For ANY order tracking, order status, or order inquiry (e.g. "Where is order X?", "Check status of order #X") -> ALWAYS call get_order_status with the order ID string.
+        3. For ANY low stock alerts, inventory warnings, or system alert questions (e.g. "Any inventory alerts?") -> ALWAYS call get_inventory_alerts.
+        4. For nonsense, ambiguous, or unclassifiable inputs (e.g. "asdfghjkl", "Hello") -> do NOT invoke any tools. Ask a polite clarifying question.
+        Always base your final response strictly on the tool output.""",
         model=model,
-        tools=[catalog_tool, order_tool, copywriter_tool, alerts_tool]
+        tools=[catalog_tool, order_tool, alerts_tool]
     )
     return agent
 
 
-def run_agent_query(query: str) -> str:
-    """Executes a natural language query through the Router Agent using ADK & LiteLlm."""
+def run_agent_query_with_events(query: str):
+    """Executes a natural language query through the Router Agent and returns (response_text, events)."""
     session_service = InMemorySessionService()
     
     try:
@@ -182,36 +184,54 @@ def run_agent_query(query: str) -> str:
         events = list(runner.run(user_id="user_cli", session_id=session.id, new_message=message))
         
         # 1. Prefer final model turn (after tool responses) if non-empty and non-tool-call
+        response_text = ""
         for event in reversed(events):
             if hasattr(event, "content") and event.content and event.content.role == "model":
                 has_func_call = any(hasattr(p, "function_call") and p.function_call for p in event.content.parts)
                 text_parts = [p.text for p in event.content.parts if hasattr(p, "text") and p.text]
                 if text_parts and not has_func_call:
-                    return "\n".join(text_parts)
+                    response_text = "\n".join(text_parts)
+                    break
         
-        # 2. Fallback to tool function_response result if final model text was empty or had func call
-        for event in reversed(events):
-            if hasattr(event, "content") and event.content:
-                for p in event.content.parts:
-                    if hasattr(p, "function_response") and p.function_response:
-                        resp = p.function_response.response
-                        if isinstance(resp, dict) and "result" in resp:
-                            return str(resp["result"])
-                        if resp:
-                            return str(resp)
+        # 2. Fallback to tool function_response result if final model text was empty
+        if not response_text:
+            for event in reversed(events):
+                if hasattr(event, "content") and event.content:
+                    for p in event.content.parts:
+                        if hasattr(p, "function_response") and p.function_response:
+                            resp = p.function_response.response
+                            if isinstance(resp, dict) and "result" in resp:
+                                response_text = str(resp["result"])
+                                break
+                            if resp:
+                                response_text = str(resp)
+                                break
+                    if response_text:
+                        break
 
         # 3. Fallback to any model text part
-        for event in reversed(events):
-            if hasattr(event, "content") and event.content and event.content.role == "model":
-                text_parts = [p.text for p in event.content.parts if hasattr(p, "text") and p.text]
-                if text_parts:
-                    return "\n".join(text_parts)
+        if not response_text:
+            for event in reversed(events):
+                if hasattr(event, "content") and event.content and event.content.role == "model":
+                    text_parts = [p.text for p in event.content.parts if hasattr(p, "text") and p.text]
+                    if text_parts:
+                        response_text = "\n".join(text_parts)
+                        break
 
-        return "I'm sorry, I couldn't process your request."
+        if not response_text:
+            response_text = "I'm sorry, I couldn't process your request."
+
+        return response_text, events
             
     except Exception as e:  # noqa: BLE001
         logger.warning(f"ADK LLM execution fallback due to: {e}")
-        return f"Error executing query: {e!s}"
+        return f"Error executing query: {e!s}", []
+
+
+def run_agent_query(query: str) -> str:
+    """Executes a natural language query through the Router Agent and returns text answer."""
+    text, _ = run_agent_query_with_events(query)
+    return text
 
 
 if __name__ == "__main__":

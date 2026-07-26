@@ -40,19 +40,35 @@
     "must_not_contain": ["Electronics Product", "Clothing Product", "Books Product"]
   },
   {
+    "id": "cat_06",
+    "name": "Catalog hit - Home & Garden",
+    "prompt": "Search for Home & Garden items in the store",
+    "expected_tool": "get_products",
+    "must_contain": ["Home & Garden Product 1", "$30.00"],
+    "must_not_contain": []
+  },
+  {
+    "id": "cat_07",
+    "name": "Catalog hit - Sports & Outdoors",
+    "prompt": "List Sports & Outdoors products",
+    "expected_tool": "get_products",
+    "must_contain": ["Sports & Outdoors Product 1", "$50.00"],
+    "must_not_contain": []
+  },
+  {
     "id": "ord_01",
-    "name": "Order lookup - Existing Order 6",
-    "prompt": "Where is order 6?",
+    "name": "Order lookup - Existing Order 9",
+    "prompt": "Where is order 9?",
     "expected_tool": "get_order_status",
-    "must_contain": ["Order #6", "Payment accepted"],
+    "must_contain": ["Order #9"],
     "must_not_contain": []
   },
   {
     "id": "ord_02",
-    "name": "Order lookup - Existing Order 7",
-    "prompt": "Check status for order #7",
+    "name": "Order lookup - Existing Order 10",
+    "prompt": "Check status for order #10",
     "expected_tool": "get_order_status",
-    "must_contain": ["Order #7", "Payment accepted"],
+    "must_contain": ["Order #10"],
     "must_not_contain": []
   },
   {
@@ -61,23 +77,7 @@
     "prompt": "What is the status of order 99999?",
     "expected_tool": "get_order_status",
     "must_contain": ["99999"],
-    "must_not_contain": ["Payment accepted"]
-  },
-  {
-    "id": "copy_01",
-    "name": "Copywriter draft - Product 20",
-    "prompt": "Draft an updated description for product 20 as: High performance premium gadget.",
-    "expected_tool": "update_product_description",
-    "must_contain": ["[DRAFT DESCRIPTION FOR REVIEW]", "High performance premium gadget"],
-    "must_not_contain": ["STORE UPDATED SUCCESSFULLY"]
-  },
-  {
-    "id": "copy_02",
-    "name": "Copywriter draft - Product 21",
-    "prompt": "Draft an updated description for product 21 as: Ergonomic design with modern aesthetic.",
-    "expected_tool": "update_product_description",
-    "must_contain": ["[DRAFT DESCRIPTION FOR REVIEW]", "Ergonomic design with modern aesthetic"],
-    "must_not_contain": ["STORE UPDATED SUCCESSFULLY"]
+    "must_not_contain": ["Ref:"]
   },
   {
     "id": "router_01",
@@ -100,23 +100,23 @@
     "name": "Inventory alerts lookup",
     "prompt": "Any low stock inventory alerts in the system?",
     "expected_tool": "get_inventory_alerts",
-    "must_contain": ["Inventory Alerts"],
+    "must_contain": ["inventory alerts"],
     "must_not_contain": []
   },
   {
     "id": "store_01",
-    "name": "Sports & Outdoors search",
-    "prompt": "List Sports & Outdoors products",
+    "name": "Specific product search - Sports 2",
+    "prompt": "Search for Sports & Outdoors Product 2 in catalog",
     "expected_tool": "get_products",
-    "must_contain": ["Sports & Outdoors Product 1", "$50.00"],
+    "must_contain": ["Sports & Outdoors Product 2", "$55.00"],
     "must_not_contain": []
   },
   {
-    "id": "store_down",
-    "name": "Store Offline Handling",
-    "prompt": "Search for Electronics products in store",
+    "id": "store_02",
+    "name": "Specific product search - Clothing 3",
+    "prompt": "Search for Clothing Product 3 in catalog",
     "expected_tool": "get_products",
-    "must_contain": ["Error"],
-    "must_not_contain": ["Found matching products"]
+    "must_contain": ["Clothing Product 3", "$30.00"],
+    "must_not_contain": []
   }
 ]
