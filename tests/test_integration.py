@@ -1,5 +1,7 @@
 import pytest
+
 from commerce_agent.prestashop_client import PrestaShopClient
+
 
 @pytest.mark.integration
 def test_real_api_connectivity():

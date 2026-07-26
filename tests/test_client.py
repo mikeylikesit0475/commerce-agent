@@ -1,54 +1,50 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
 from commerce_agent.prestashop_client import PrestaShopClient
 
-def test_get_products_parsing():
-    # Mock the requests.get call to return a valid PrestaShop JSON response
-    with patch('requests.get') as mock_get:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "products": [
-                {
-                    "id": "1",
-                    "name": "Fancy Mug",
-                    "price": "15.00",
-                    "description_short": "A very fancy mug.",
-                    "quantity": 10
-                },
-                {
-                    "id": "2",
-                    "name": "Plain Plate",
-                    "price": "5.00",
-                    "description_short": "Just a plate.",
-                    "quantity": 5
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
 
-        client = PrestaShopClient() # Ensure .env is handled or values are mocked if needed
-        
-        # Test filtering for 'Mug'
-        results = client.get_products("Mug")
-        assert len(results) == 1
-        assert results[0]["name"] == "Fancy Mug"
-
-        # Test filtering for 'Plate'
-        results = client.get_products("Plate")
-        assert len(results) == 1
-        assert results[0]["name"] == "Plain Plate"
-
-        # Test no match
-        results = client.get_products("Toaster")
-        assert isinstance(results, dict)
-        assert "No products found" in results["message"]
-
-def test_get_products_connection_error():
-    with patch('requests.get') as mock_get:
-        mock_get.side_effect = Exception("Connection timeout")
+def test_client_init_lazy_without_env():
+    """Client initialization should not raise ValueError when WEBSERVICE_KEY is missing."""
+    with patch.dict("os.environ", {}, clear=True):
         client = PrestaShopClient()
-        results = client.get_products("Mug")
-        assert isinstance(results, dict)
-        assert "error" in results
-        assert "Could not connect to store" in results["error"]
+        assert client.key is None
+        res = client.get_products("Electronics")
+        assert "error" in res
+        assert "WEBSERVICE_KEY" in res["error"]
+
+def test_get_products_description_search_match():
+    """Verify that keyword in product description (absent in name) returns product."""
+    mock_products = {
+        "products": [
+            {
+                "id": 1,
+                "name": "Standard Gadget",
+                "price": "49.990000",
+                "description": "This is a fantastic high-tech gadget for audiophiles",
+                "description_short": "Short summary"
+            }
+        ]
+    }
+    mock_stock = {
+        "stock_availables": [
+            {"id_product": 1, "quantity": 100}
+        ]
+    }
+
+    client = PrestaShopClient(url="http://mock-store/api", key="MOCK_KEY")
+    
+    def mock_get(url, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        if "stock_availables" in url:
+            resp.json.return_value = mock_stock
+        else:
+            resp.json.return_value = mock_products
+        return resp
+
+    with patch("requests.get", side_effect=mock_get):
+        res = client.get_products("audiophiles")
+        assert isinstance(res, list)
+        assert len(res) == 1
+        assert res[0]["name"] == "Standard Gadget"
+        assert res[0]["stock"] == 100

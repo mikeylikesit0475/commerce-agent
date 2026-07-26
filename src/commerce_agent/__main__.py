@@ -1,5 +1,7 @@
 import sys
+
 from .agent import run_agent_query
+
 
 def main():
     if len(sys.argv) < 2:

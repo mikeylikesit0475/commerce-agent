@@ -1,66 +1,112 @@
+import logging
 import os
+
 from dotenv import load_dotenv
 from google.adk import Agent, Runner
+from google.adk.models.lite_llm import LiteLlm
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import FunctionTool
+from google.genai import types
+
 from .prestashop_client import PrestaShopClient
 
 load_dotenv()
-
-# Initialize the store client
-store_client = PrestaShopClient()
+logger = logging.getLogger(__name__)
 
 def get_products(query: str) -> str:
     """
-    Searches products in the online store based on a keyword query.
-    Returns details like name, price, and stock quantity.
+    Searches products in the PrestaShop store by keyword query (matches name or description).
+    Returns a formatted string listing matching products with their price, stock quantity, and description.
     """
-    result = store_client.get_products(query)
+    client = PrestaShopClient()
+    result = client.get_products(query)
+    
     if isinstance(result, dict) and "error" in result:
         return f"Error accessing store: {result['error']}"
     if isinstance(result, dict) and "message" in result:
         return result["message"]
     
-    # Format list of products into a readable string
-    products_str = "\n".join([
-        f"- {p['name']} (ID: {p['id']}): Price ${p['price']}, Stock: {p['stock']}. Desc: {str(p['description'])[:100]}..." 
-        for p in result
-    ])
-    return f"Found the following products:\n{products_str}"
+    if not isinstance(result, list) or not result:
+        return f"No products found matching '{query}'."
 
-# Define the tool for ADK
+    formatted_items = []
+    for p in result:
+        try:
+            price_val = float(p.get('price', 0))
+            price_str = f"${price_val:.2f}"
+        except (ValueError, TypeError):
+            price_str = f"${p.get('price')}"
+            
+        formatted_items.append(
+            f"- {p['name']} (ID: {p['id']}): Price {price_str}, Stock: {p['stock']}. Desc: {str(p.get('description', ''))[:80]}..."
+        )
+    
+    return "Found matching products:\n" + "\n".join(formatted_items)
+
+# Wrap function in ADK FunctionTool
 products_tool = FunctionTool(func=get_products)
 
 def create_catalog_agent():
-    model_name = os.getenv("AGENT_MODEL", "olmo-3.1:32b-instruct")
+    raw_model_name = os.getenv("AGENT_MODEL", "olmo-3.1:32b-instruct")
     
-    # Create an ADK agent and register the tool
+    # Ensure model uses ollama_chat prefix for LiteLlm wrapper
+    if not raw_model_name.startswith("ollama_chat/") and not raw_model_name.startswith("ollama/"):
+        model_spec = f"ollama_chat/{raw_model_name}"
+    else:
+        model_spec = raw_model_name
+
+    model = LiteLlm(model=model_spec)
+    
     agent = Agent(
         name="CatalogQnASEntry",
-        instruction="""You are a helpful store assistant. 
-        When asked about product availability or pricing, ALWAYS use the get_products tool. 
-        Answer based ONLY on the data returned by the tool. 
-        If products are found, list them clearly with price and stock.
-        If no products are found or there is an error, inform the user politely.""",
-        model=model_name,
+        instruction="""You are a store assistant. 
+        When asked about product availability, prices, or store inventory, ALWAYS call the get_products tool. 
+        Answer based ONLY on the data returned by the get_products tool. 
+        List matching products clearly with exact price and stock quantity.
+        If no products are found, inform the user politely.""",
+        model=model,
         tools=[products_tool]
     )
     return agent
 
 def run_agent_query(query: str) -> str:
-    """Runs a query through the agent using get_products tool."""
-    agent = create_catalog_agent()
+    """Executes a natural language query through the ADK Agent & Runner with LiteLlm."""
     session_service = InMemorySessionService()
     
     try:
+        agent = create_catalog_agent()
         runner = Runner(app_name="commerce_agent_app", agent=agent, session_service=session_service)
-        # Attempt running with runner if model backend is available
-        # Fallback to direct tool call output if model execution environment is detached
-        tool_result = get_products(query)
-        return tool_result
-    except Exception as e:
+        session = session_service.create_session_sync(app_name="commerce_agent_app", user_id="user_cli")
+        
+        message = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=query)]
+        )
+        
+        events = list(runner.run(user_id="user_cli", session_id=session.id, new_message=message))
+        
+        # Extract the final model text output from the events
+        final_answer = ""
+        for event in reversed(events):
+            if hasattr(event, "content") and event.content and event.content.role == "model":
+                for part in event.content.parts:
+                    if hasattr(part, "text") and part.text:
+                        final_answer = part.text
+                        break
+                if final_answer:
+                    break
+        
+        if final_answer:
+            return final_answer
+        else:
+            return get_products(query)
+            
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"ADK LLM execution fallback due to: {e}")
+        # Fallback cleanly if LLM model runner encounters environment issues
         return get_products(query)
 
 if __name__ == "__main__":
-    response = run_agent_query("Electronics")
-    print(f"Agent Response:\n{response}")
+    import sys
+    q = sys.argv[1] if len(sys.argv) > 1 else "Do we have any Electronics? What do they cost?"
+    print(run_agent_query(q))

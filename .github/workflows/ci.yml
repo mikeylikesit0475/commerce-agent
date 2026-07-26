@@ -21,8 +21,12 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install .
+        pip install ruff pytest .
 
-    - name: Run Unit Tests (skip integration)
+    - name: Lint with Ruff
+      run: |
+        ruff check .
+
+    - name: Run Unit Tests (no .env required)
       run: |
         pytest -m "not integration"

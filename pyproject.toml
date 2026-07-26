@@ -1,12 +1,12 @@
 [project]
 name = "commerce-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Catalog & Store Assistant Agent powered by Google ADK and LiteLLM."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "google-adk>=2.5.0",
-    "pytest>=9.1.1",
+    "litellm>=1.93.0",
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
 ]
@@ -15,4 +15,10 @@ dependencies = [
 pythonpath = ["src"]
 markers = [
     "integration: marks tests as integration tests requiring live infrastructure"
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.0",
 ]
