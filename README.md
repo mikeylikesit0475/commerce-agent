@@ -1,58 +1,103 @@
-# Commerce Agent (Google ADK Python + LiteLLM / Ollama)
+# Commerce Agent (Multi-Agent System with Google ADK + LiteLLM)
 
-AI Agent built with **Google ADK (Agent Development Kit)** and **LiteLLM** for catalog search and product Q&A against live store data from PrestaShop.
+Multi-agent AI platform built with **Google ADK** (`Agent`, `Runner`, `InMemorySessionService`) and **LiteLLM** wrapping local Ollama models (`olmo-3.1:32b-instruct`).
 
-## Architecture
+## 📐 Architecture Diagram
 
-- **Framework**: Google ADK (`Agent`, `Runner`, `InMemorySessionService`)
-- **LLM Backend**: `google.adk.models.lite_llm.LiteLlm` wrapping local Ollama models (`olmo-3.1:32b-instruct`).
-- **Tool**: `get_products(query: str)` using `PrestaShopClient` to query live store products and stock quantities via HTTP Basic Auth.
-- **Resilience**: Lazy configuration loading ensures unit tests run cleanly without `.env`.
+```text
+                               +-----------------------------+
+                               |     CommerceRouterAgent     |
+                               |    (Intent Classifier)      |
+                               +--------------+--------------+
+                                              |
+      +---------------------------------------+---------------------------------------+
+      |                                       |                                       |
+      v                                       v                                       v
++-----------------------+           +-----------------------+           +-----------------------+
+|   CatalogSpecialist   |           | OrderSupportSpecialist|           |  CopywriterSpecialist |
++-----------+-----------+           +-----------+-----------+           +-----------+-----------+
+            |                                   |                                   |
+            v                                   v                                   v
+    get_products()                      get_order_status()              update_product_description()
+            |                                   |                                   |
+            +-----------------------------------+-----------------------------------+
+                                                |
+                                                v
+                               +-----------------------------+
+                               |   PrestaShop Webservice API |
+                               | (Products, Orders, Stock)   |
+                               +-----------------------------+
+```
+
+### Design Rationale: Multi-Tool Router Agent
+The router agent acts as a unified entry point, utilizing tool schemas and intent instructions to select the appropriate specialist tool. This avoids redundant round-trips while enforcing domain safety (e.g., draft confirmation before database mutation).
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 ```bash
-# 1. Copy environment template
+# 1. Environment & Dependencies
 cp .env.example .env
-
-# 2. Sync dependencies
 uv sync
 
-# 3. Run ruff linter
+# 2. Linting & Unit Testing
 uv run ruff check .
-
-# 4. Run unit tests (no .env required)
 uv run pytest -m "not integration"
 
-# 5. Run integration tests against live PrestaShop container
+# 3. Integration Testing against PrestaShop
 uv run pytest
 
-# 6. Execute catalog Q&A CLI query via Google ADK
-uv run python -m commerce_agent "Do we have any Electronics? What do they cost?"
+# 4. CLI Execution
+uv run python -m commerce_agent "Where is order 12?"
 ```
 
 ---
 
-## 📸 Real & Reproducible Terminal Transcript
+## 📸 Real & Reproducible Transcripts
 
-The transcript below is generated from an actual run against the live seeded PrestaShop store:
+### 1. Order Support Specialist ("Where is order 12?")
+```text
+$ uv run python -m commerce_agent "Where is order 12?"
 
+Question: Where is order 12?
+Agent Answer:
+Order #12 has a status of "Payment accepted / Processing." The total paid is $348.27, and it was placed on July 25th, 2026 at 8:35 PM.
+```
+
+### 2. Catalog Specialist ("Do we have any Electronics?")
 ```text
 $ uv run python -m commerce_agent "Do we have any Electronics? What do they cost?"
 
 Question: Do we have any Electronics? What do they cost?
-
 Agent Answer:
 Yes, we have many Electronics products available. Here are some examples with their exact prices and stock quantities:
 
 - Electronics Product 1 (ID: 20): $67.63, Stock: 100
 - Electronics Product 2 (ID: 21): $442.72, Stock: 100
 - Electronics Product 3 (ID: 22): $464.06, Stock: 100
-- Electronics Product 4 (ID: 23): $153.03, Stock: 100
-- Electronics Product 5 (ID: 24): $52.72, Stock: 100
-- ...and many more with prices ranging from $11.76 to $479.16, all currently in stock at 100 units each.
+- ...all currently in stock at 100 units each.
+```
 
-If you want details about a specific product or a narrower search, please let me know!
+### 3. Copywriter Specialist (Draft Review Flow)
+```text
+$ uv run python -m commerce_agent "Improve description for product 20 to 'High performance premium flagship electronics gadget.'"
+
+Question: Improve description for product 20 to 'High performance premium flagship electronics gadget.'
+Agent Answer:
+[DRAFT DESCRIPTION FOR REVIEW]
+Product: Electronics Product 1 (ID: 20)
+Proposed New Description:
+"High performance premium flagship electronics gadget."
+
+Please confirm: Do you want to publish this update to PrestaShop? (Reply 'yes' or 'confirm' to proceed)
+```
+
+### 4. Nonsense / Ambiguous Prompt (Clarification Flow)
+```text
+$ uv run python -m commerce_agent "asdfghjk 12345"
+
+Question: asdfghjk 12345
+Agent Answer:
+I'm sorry, I didn't understand your request. Could you please clarify what information or assistance you're looking for?
 ```
