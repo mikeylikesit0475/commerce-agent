@@ -171,3 +171,5 @@ store_02   | Specific product search - Clothi | FAIL   | 9.36s
 ==========================================================================
 ```
 <!-- EVAL:END -->
+
+**Reading the scorecard honestly:** the verified baseline with `olmo-3.1:32b-instruct` is 11/16. All five failures share one failure mode — the model sometimes declines to emit a tool call for certain phrasings and asks for a keyword instead (a known ceiling of local models on tool-calling; see the design decision above for why side effects and workflow entry don't depend on it). `make eval` enforces a **regression floor of 10** (catches real regressions without failing on single-case nondeterminism); the aspirational target is 12+, reachable by swapping `AGENT_MODEL` to a stronger tool-calling model.
